@@ -70,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Sincronização Real com o Servidor Render
   Future<void> _syncAndListen() async {
     if (!_isNodeActive) return;
 
@@ -85,44 +84,51 @@ class _HomeScreenState extends State<HomeScreen> {
         final data = json.decode(response.body);
         _addLog("Sincronizado com a malha Mesh.");
         
-        // INTEGRAÇÃO REAL: Verifica se o servidor enviou um bloco de trabalho legítimo
+        // Agora o app lê também o 'idBloco' que o servidor mandou
         if (data['tarefaPendente'] != null && _shareCPU && !_isProcessing) {
           final tarefa = data['tarefaPendente'];
-          _executeCryptoTask(tarefa['seedMatematica'], tarefa['dificuldade']);
+          _executeCryptoTask(tarefa['idBloco'], tarefa['seedMatematica'], tarefa['dificuldade']);
         } else if (data['tarefaPendente'] == null && _shareCPU) {
-          _addLog("Fila de processamento vazia. Aguardando novos blocos...");
+          _addLog("Fila vazia. Nenhum bloco pendente no servidor.");
         }
       }
     } catch (e) {
-      _addLog("Erro de conexão com o rastreador de nós.");
+      _addLog("Erro de conexão com o rastreador.");
     }
   }
 
-  // MOTOR BRUTO DE PROCESSAMENTO DE DADOS DA REDE
-  void _executeCryptoTask(String seed, String dificuldade) {
+  // Recebe o idBloco para saber exatamente qual arquivo do banco ele está resolvendo
+  void _executeCryptoTask(String? idBloco, String seed, String dificuldade) {
     setState(() { _isProcessing = true; });
-    _addLog("Bloco de processamento detectado!");
-    _addLog("Seed de dados recebida: [$seed]");
-    _addLog("Configuração de estresse: $dificuldade");
+    _addLog("Bloco detectado! Iniciando computação...");
+    _addLog("Seed de dados: [$seed]");
 
-    // Executa a tarefa matemática baseada na Seed gerada pelo Render
-    Future.delayed(const Duration(milliseconds: 500), () {
+    Future.delayed(const Duration(milliseconds: 500), () async {
       if (!_shareCPU || !_isNodeActive) {
         setState(() { _isProcessing = false; });
         return;
       }
       
-      _addLog("Iniciando computação descentralizada...");
-      
-      // Loop de alta intensidade rodando SHA-256 em cima da seed real do servidor
+      // Laço de processamento da CPU
       String payload = seed;
       for (int i = 0; i < 5000; i++) {
         payload = sha256.convert(utf8.encode(payload)).toString();
       }
       
       _addLog("✔ Sucesso: Bloco criptográfico resolvido.");
-      _addLog("Resultado parcial: ${payload.substring(0, 10)}... (Assinado)");
-      _addLog("Prova de trabalho enviada anonimamente.");
+      _addLog("Assinatura: ${payload.substring(0, 10)}...");
+      
+      // O CAMINHO DE VOLTA: Se for um bloco real, devolve para o servidor
+      if (idBloco != null) {
+        _addLog("Enviando Prova de Trabalho para o servidor...");
+        try {
+          final urlRetorno = Uri.parse('https://eureka-z34r.onrender.com/concluir-tarefa?idBloco=$idBloco&nodeId=$_anonymousNodeId');
+          await http.get(urlRetorno);
+          _addLog("✔ Bloco entregue e validado pela rede!");
+        } catch(e) {
+          _addLog("[!] Falha ao entregar o resultado.");
+        }
+      }
       
       setState(() { _isProcessing = false; });
     });
@@ -137,11 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isNodeActive) {
       _addLog("Conectando ao rastreador descentralizado...");
       _syncAndListen();
-      // Varre o servidor de 10 em 10 segundos procurando tarefas
       _pollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) => _syncAndListen());
     } else {
       _pollingTimer?.cancel();
-      _addLog("Nó desconectado da malha principal.");
+      _addLog("Nó desconectado.");
       setState(() { _isProcessing = false; });
       _syncAndListen();
     }
@@ -165,51 +170,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        'EUREKA',
-                        style: TextStyle(color: Color(0xFF6C5CE7), fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 3),
-                      ),
-                      const Text(
-                        'Protocolo de Rede Descentralizada',
-                        style: TextStyle(color: Color(0xFF8F8FA8), fontSize: 12),
-                      ),
+                      const Text('EUREKA', style: TextStyle(color: Color(0xFF6C5CE7), fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 3)),
+                      const Text('Protocolo de Rede Descentralizada', style: TextStyle(color: Color(0xFF8F8FA8), fontSize: 12)),
                       const SizedBox(height: 25),
                       GestureDetector(
                         onTap: _togglePower,
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
-                          width: 95,
-                          height: 95,
+                          width: 95, height: 95,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: _isNodeActive ? const Color(0xFF00B894) : const Color(0xFFFF7675),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _isNodeActive ? const Color(0xFF00B894).withOpacity(0.5) : const Color(0xFFFF7675).withOpacity(0.4),
-                                blurRadius: 18,
-                              )
-                            ],
+                            boxShadow: [ BoxShadow(color: _isNodeActive ? const Color(0xFF00B894).withOpacity(0.5) : const Color(0xFFFF7675).withOpacity(0.4), blurRadius: 18) ],
                           ),
-                          child: Center(
-                            child: Text(
-                              _isNodeActive ? "LIGADO" : "LIGAR",
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                          ),
+                          child: Center(child: Text(_isNodeActive ? "LIGADO" : "LIGAR", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
                         ),
                       ),
                       const SizedBox(height: 25),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A1A30),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border(
-                            left: BorderSide(
-                              color: _isNodeActive ? const Color(0xFF00B894) : const Color(0xFFFF7675),
-                              width: 4,
-                            ),
-                          ),
+                          color: const Color(0xFF1A1A30), borderRadius: BorderRadius.circular(12),
+                          border: Border(left: BorderSide(color: _isNodeActive ? const Color(0xFF00B894) : const Color(0xFFFF7675), width: 4)),
                         ),
                         width: double.infinity,
                         child: Text('Status: $_statusText', style: const TextStyle(fontSize: 13, color: Colors.white)),
@@ -226,48 +208,27 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           Switch(
-                            value: _shareCPU,
-                            activeColor: const Color(0xFF6C5CE7),
-                            onChanged: (val) {
-                              setState(() {
-                                _shareCPU = val;
-                              });
-                              _syncAndListen();
-                            },
+                            value: _shareCPU, activeColor: const Color(0xFF6C5CE7),
+                            onChanged: (val) { setState(() { _shareCPU = val; }); _syncAndListen(); },
                           )
                         ],
                       ),
-                      Text(
-                        'ID ANÔNIMO: $_anonymousNodeId',
-                        style: const TextStyle(color: Color(0xFF636E72), fontSize: 11, fontFamily: 'monospace'),
-                      ),
+                      Text('ID ANÔNIMO: $_anonymousNodeId', style: const TextStyle(color: Color(0xFF636E72), fontSize: 11, fontFamily: 'monospace')),
                     ],
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(" MONITOR DO MOTOR P2P", style: TextStyle(color: Color(0xFF6C5CE7), fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
+                const Align(alignment: Alignment.centerLeft, child: Text(" MONITOR DO MOTOR P2P", style: TextStyle(color: Color(0xFF6C5CE7), fontWeight: FontWeight.bold, fontSize: 12))),
                 const SizedBox(height: 5),
                 Container(
-                  height: 180,
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF23233C)),
-                  ),
+                  height: 180, width: double.infinity, padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF23233C))),
                   child: ListView.builder(
                     itemCount: _terminalLogs.length,
                     itemBuilder: (context, index) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4.0),
-                        child: Text(
-                          _terminalLogs[index],
-                          style: const TextStyle(color: Color(0xFF00FF00), fontFamily: 'monospace', fontSize: 11),
-                        ),
+                        child: Text(_terminalLogs[index], style: const TextStyle(color: Color(0xFF00FF00), fontFamily: 'monospace', fontSize: 11)),
                       );
                     },
                   ),
