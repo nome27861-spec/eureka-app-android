@@ -1,0 +1,26 @@
+name: eureka_app_android
+description: "Motor nativo e anônimo do protocolo de rede descentralizada Eureka."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Biblioteca para fazer requisições HTTP ultra-rápidas para o seu Render
+  http: ^1.1.0
+
+  # Biblioteca de criptografia para gerar os IDs anônimos com SHA-256 localmente
+  crypto: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
